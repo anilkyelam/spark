@@ -25,7 +25,7 @@ import com.google.common.base.Throwables;
  * Plugs into {@link RetryingBlockFetcher} to further control when an exception should be retried
  * and logged.
  * Note: {@link RetryingBlockFetcher} will delegate the exception to this handler only when
- * - remaining retries < max retries
+ * - remaining retries less than max retries
  * - exception is an IOException
  */
 

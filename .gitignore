@@ -102,3 +102,7 @@ spark-warehouse/
 
 # For SBT
 .jvmopts
+
+# Enable conf changes
+!conf/spark-defaults.conf
+!conf/spark-env.sh
