@@ -8,18 +8,25 @@ usage="\n
 -r, --rebuild \t issue a clean build\n
 -h, --help \t this usage information message\n"
 
+# Defaults
+ACTION="package"
+
 # Parse command line arguments
 for i in "$@"
 do
 case $i in
-    -r | --REBUILD)  
+    -c | --CLEAN)  
     CLEAN="clean"
+    ;;
+    
+    -i | --INSTALL)  
+    ACTION="install"
     ;;
 
     -h | --help)
-        echo -e $usage
-        exit
-        ;;
+    echo -e $usage
+    exit
+    ;;
 
     *)                  # unknown option
     echo "Unkown Option: $i"
@@ -37,10 +44,9 @@ dir=$(realpath "$dir")
 $dir/sbin/stop-history-server.sh
 
 # Build spark
-$dir/build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests $CLEAN package 
-
-# Install packages to local maven repo
-$dir/build/mvn install
+pushd "$dir"
+./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests $CLEAN $ACTION 
+popd "$dir"
 
 # Upload jars to HDFS
 # TODO

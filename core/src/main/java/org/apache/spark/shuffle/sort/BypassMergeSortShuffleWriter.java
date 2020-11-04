@@ -23,6 +23,8 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
+import java.util.List;
+import java.util.ArrayList;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -52,6 +54,10 @@ import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
+
+import org.openjdk.jol.info.ClassLayout;
+import org.openjdk.jol.info.GraphLayout;
+import org.openjdk.jol.vm.VM;
 
 /**
  * This class implements sort-based shuffle's hash-style shuffle fallback path. This write path
@@ -88,6 +94,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final long mapId;
   private final Serializer serializer;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
+  private final String mapsToRecord;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -121,6 +128,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
+    this.mapsToRecord = conf.get("spark.maps.record", "");
   }
 
   @Override
@@ -152,10 +160,38 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // included in the shuffle write time.
       writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
+      // Writing object layout  
+      int count = 1;
+      Boolean write_jol = false;
+      System.out.printf("Map id: %d, Shuffle id: %d\n", mapId, shuffleId);
+      System.out.printf("Maps: %s\n", mapsToRecord);
+      String[] maps = mapsToRecord.split(",");
+      for(int i = 0; i < maps.length; i++) {
+          if (mapId == Integer.parseInt(maps[i])) {
+            write_jol = true;
+            break;
+          }
+      }
+
       while (records.hasNext()) {
         final Product2<K, V> record = records.next();
         final K key = record._1();
         partitionWriters[partitioner.getPartition(key)].write(key, record._2());
+        
+        // print (virtual) addresses of shuffle objects
+        if (write_jol) { 
+          GraphLayout g = GraphLayout.parseInstance(record);
+          if (count == 1) {
+            // first record
+            System.out.println(VM.current().details());
+            System.out.println(g.toPrintable());
+          }
+
+          List<String> addrs = new ArrayList<>();
+          for (Long i : g.addresses())  addrs.add(String.valueOf(i));
+          System.out.printf("%d,%d,%s\n", mapId, count, String.join(",", addrs));
+          count++; 
+        }
       }
 
       for (int i = 0; i < numPartitions; i++) {
