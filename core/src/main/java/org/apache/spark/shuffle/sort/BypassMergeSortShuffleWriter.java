@@ -164,7 +164,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       int count = 1;
       Boolean write_jol = false;
       System.out.printf("Map id: %d, Shuffle id: %d\n", mapId, shuffleId);
-      System.out.printf("Maps: %s\n", mapsToRecord);
+      System.out.printf("Maps: %s\n",   );
       String[] maps = mapsToRecord.split(",");
       for(int i = 0; i < maps.length; i++) {
           if (mapId == Integer.parseInt(maps[i])) {

@@ -106,3 +106,8 @@ spark-warehouse/
 # Enable conf changes
 !conf/spark-defaults.conf
 !conf/spark-env.sh
+
+# ANIL: Adding more workspace files to ignore
+**/.bloop/
+**/.metals/
+**/.vscode/
