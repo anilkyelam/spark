@@ -21,6 +21,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.FileWriter;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
 import java.util.List;
@@ -57,6 +59,7 @@ import org.apache.spark.util.Utils;
 
 import org.openjdk.jol.info.ClassLayout;
 import org.openjdk.jol.info.GraphLayout;
+import org.openjdk.jol.info.GraphPathRecord;
 import org.openjdk.jol.vm.VM;
 
 /**
@@ -95,6 +98,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final Serializer serializer;
   private final ShuffleExecutorComponents shuffleExecutorComponents;
   private final String mapsToRecord;
+  private final String shufflesToRecord;
+  private final String recordDir;
 
   /** Array of file writers, one for each partition */
   private DiskBlockObjectWriter[] partitionWriters;
@@ -128,7 +133,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.mapsToRecord = conf.get("spark.maps.record", "");
+    this.recordDir = conf.get("spark.record.dir", "");
+    this.shufflesToRecord = conf.get("spark.record.shuffles", "");
+    this.mapsToRecord = conf.get("spark.record.maps", "");
   }
 
   @Override
@@ -160,17 +167,41 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       // included in the shuffle write time.
       writeMetrics.incWriteTime(System.nanoTime() - openStartTime);
 
+      System.out.printf("Map id: %d, Shuffle id: %d\n", mapId, shuffleId);
+      // System.out.printf("Maps: %s, Shuffles: %s\n", mapsToRecord, shufflesToRecord);
+
+      /* If maps or shuffles to record are provided, write output for only those. Otherwise, write for every map task */
+      Boolean writeJol = true;
+      int i;
+      if (!shufflesToRecord.isEmpty()) {
+        String[] shuffles = shufflesToRecord.split(",");
+        for(i = 0; i < shuffles.length; i++) {
+            if (shuffles[i].isEmpty() || shuffleId != Integer.parseInt(shuffles[i]))  
+              continue;
+            break;
+        }
+        if (i == shuffles.length) 
+          writeJol = false;
+      }
+      if (!mapsToRecord.isEmpty()) {
+        String[] maps = mapsToRecord.split(",");
+        for(i = 0; i < maps.length; i++) {
+            if (maps[i].isEmpty() || mapId != Integer.parseInt(maps[i]))  
+              continue;
+            break;
+        }
+        if (i == maps.length) 
+          writeJol = false;
+      }
+
       // Writing object layout  
       int count = 1;
-      Boolean write_jol = false;
-      System.out.printf("Map id: %d, Shuffle id: %d\n", mapId, shuffleId);
-      System.out.printf("Maps: %s\n",   );
-      String[] maps = mapsToRecord.split(",");
-      for(int i = 0; i < maps.length; i++) {
-          if (mapId == Integer.parseInt(maps[i])) {
-            write_jol = true;
-            break;
-          }
+      String recordsfile = this.recordDir + String.format("/records-%d-%d", shuffleId, mapId);
+      String detailsfile = this.recordDir + String.format("/details-%d-%d", shuffleId, mapId);
+      PrintWriter recw = null, detw = null;
+      if (writeJol) {
+        recw = new PrintWriter(new FileWriter(recordsfile));
+        detw = new PrintWriter(new FileWriter(detailsfile));
       }
 
       while (records.hasNext()) {
@@ -178,23 +209,33 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         final K key = record._1();
         partitionWriters[partitioner.getPartition(key)].write(key, record._2());
         
-        // print (virtual) addresses of shuffle objects
-        if (write_jol) { 
-          GraphLayout g = GraphLayout.parseInstance(record);
+        // Write object info to file
+        if (writeJol) { 
+          GraphLayout g = GraphLayout.parseInstance(record._2());
           if (count == 1) {
-            // first record
-            System.out.println(VM.current().details());
-            System.out.println(g.toPrintable());
+            // first record, print more details
+            ClassLayout c = ClassLayout.parseInstance(record._2());
+            detw.println(VM.current().details());
+            detw.println(g.toPrintable());
+            detw.println(c.toPrintable());
           }
 
-          List<String> addrs = new ArrayList<>();
-          for (Long i : g.addresses())  addrs.add(String.valueOf(i));
-          System.out.printf("%d,%d,%s\n", mapId, count, String.join(",", addrs));
+          recw.printf("%d,%d,%d,%d", shuffleId, mapId, count, g.addresses().size());
+          for (long addr : g.addresses()) {
+              GraphPathRecord r = g.record(addr);
+              recw.printf(",%d,%d,%d", addr, r.size(), r.depth());
+          }
+          recw.printf("\n");
           count++; 
         }
       }
+      
+      if (writeJol) {
+        recw.close(); 
+        detw.close(); 
+      }
 
-      for (int i = 0; i < numPartitions; i++) {
+      for (i = 0; i < numPartitions; i++) {
         try (DiskBlockObjectWriter writer = partitionWriters[i]) {
           partitionWriterSegments[i] = writer.commitAndGet();
         }
