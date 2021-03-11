@@ -98,6 +98,10 @@ private[spark] class SortShuffleWriter[K, V, C](
 private[spark] object SortShuffleWriter {
   def shouldBypassMergeSort(conf: SparkConf, dep: ShuffleDependency[_, _, _]): Boolean = {
     // We cannot bypass sorting if we need to do map-side aggregation.
+    // scalastyle:off println
+    System.out.println("Shuffle id: %d, Partitions: %d, mapSideCombine: %s"
+      .format(dep.shuffleId, dep.partitioner.numPartitions, dep.mapSideCombine.toString()))
+    // scalastyle:on println line=102 column=15
     if (dep.mapSideCombine) {
       false
     } else {

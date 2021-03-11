@@ -52,8 +52,14 @@ if [[ $CLEAN ]]; then
     bash $dir/../jol/build.sh $CFLAG --install
 fi
 
+# Increase memory to maven for faster build. Options depend on the available memory on the server.
+hname=`hostname | cut -d"." -f1`
+if [ $hname == "spark-29" ];then
+    export MAVEN_OPTS="-Xms10240M -Xmx65536M -Xss512M -XX:MaxMetaspaceSize=10240M"
+fi
+
 # Build spark
 pushd "$dir"
-./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests $CLEAN $ACTION 
+./build/mvn -Pyarn -Phive -Dhadoop.version=2.8.5 -DskipTests -Dmaven.test.skip=true $CLEAN $ACTION 
 popd "$dir"
 
