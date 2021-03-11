@@ -148,6 +148,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       handle.shuffleId, _ => new OpenHashSet[Long](16))
     mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
     val env = SparkEnv.get
+    System.out.println("Shuffle %d writer: %s\n".format(mapId, handle.toString()))
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
         new UnsafeShuffleWriter(

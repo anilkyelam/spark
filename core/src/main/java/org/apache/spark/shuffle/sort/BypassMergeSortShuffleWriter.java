@@ -214,10 +214,10 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           GraphLayout g = GraphLayout.parseInstance(record._2());
           if (count == 1) {
             // first record, print more details
-            ClassLayout c = ClassLayout.parseInstance(record._2());
             detw.println(VM.current().details());
             detw.println(g.toPrintable());
-            detw.println(c.toPrintable());
+            // ClassLayout c = ClassLayout.parseInstance(record._2()); // this is causing error when app-defined classes are involved?
+            // detw.println(c.toPrintable());
           }
 
           recw.printf("%d,%d,%d,%d", shuffleId, mapId, count, g.addresses().size());
